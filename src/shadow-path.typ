@@ -264,7 +264,34 @@
   place(path(stroke: blue, .._offset-bezier(shadow-radius, .._split-bezier-rep(5, vertex0, vertex1))))
   let bezier = _split-bezier-rep(3, vertex0, vertex1)
   for (v0, v1) in bezier.zip(bezier.slice(1)) {
-    place(path(stroke: red, closed: true, v0, v1, .._offset-bezier(shadow-radius, v0, v1).rev()))
+    let (v3, v2) = _offset-bezier(shadow-radius, v0, v1)
+    if v0.len() == 2 {
+      v0.insert(1, _rot(v0.last(), 90deg))
+      v0.at(2) = _rot(v0.at(2), 180deg)
+    } else {
+      v0.at(1) = _rot(v0.last(), -90deg)
+    }
+    if v1.len() == 2 {
+      v1.insert(1, _rot(v1.last(), 0deg))
+      v1.at(2) = _rot(v1.at(2), 90deg)
+    } else {
+      v1.at(1) = _rot(v1.last(), 180deg)
+      v1.at(2) = _rot(v1.at(2), -90deg)
+    }
+    if v2.len() == 2 {
+      v2.insert(1, _rot(v2.last(), -90deg))
+    } else {
+      v2.at(1) = _rot(v2.last(), 90deg)
+      v2.at(2) = _rot(v2.at(2), 180deg)
+    }
+    if v3.len() == 2 {
+      v3.insert(2, _rot(v3.last(), -90deg))
+    } else {
+      v3.at(2) = _rot(v3.last(), 90deg)
+    }
+    v3.at(1) = _rot(v3.at(1), 180deg)
+    // panic(v0, v1, v2, v3)
+    place(path(stroke: red, closed: true, v0, v1, v2, v3))
   }
   // place(path(stroke: blue, (
   //   _add(vertex0.first(), _rot((shadow-radius, 0cm), 90deg + calc.atan2(..vertex0.last().map(x => x.pt())))),
