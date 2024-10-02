@@ -195,17 +195,18 @@
 #let _correct_vertex(vertex) = {
   if vertex.len() == 1 {
     (..vertex, (0cm, 0cm))
-  } else if vertex.len() == 2 {
+  } else if vertex.len() >= 2 {
     if type(vertex.first()) == array {
       vertex
     } else {
       (vertex, (0cm, 0cm))
     }
   } else {
-    panic("invalid vertex")
+    panic("invalid vertex", vertex)
   }
 }
 
+// Split a bezier curve defined by two vertices at t
 #let _split-single-bezier(t, vertex0, vertex1) = {
   // See https://en.wikipedia.org/wiki/B%C3%A9zier_curve#Higher-order_curves
   // for a good diagram for this. Some of the naming is shared
@@ -217,9 +218,9 @@
   // Calculate the new control points
   let v0 = vertex0.first()
   let v2 = vertex1.first()
-  let q0 = _add(v0, _mult(vertex0.last(), -t))
+  let q0 = _add(v0, _mult(vertex0.at(1), -t))
   let q2 = _add(v2, _mult(vertex1.at(1), 1 - t))
-  let q1 = _add(_sub(v0, vertex0.last()), _mult(_sub(_add(v2, vertex1.at(1)), _add(_sub(v0, vertex0.last()))), t))
+  let q1 = _add(_sub(v0, vertex0.at(1)), _mult(_sub(_add(v2, vertex1.at(1)), _add(_sub(v0, vertex0.at(1)))), t))
   let r0 = _add(q0, _mult(_sub(q1, q0), t))
   let r1 = _add(q1, _mult(_sub(q2, q1), t))
   let v1 = _add(r0, _mult(_sub(r1, r0), t))
@@ -228,11 +229,21 @@
   ((v0, _sub(v0, q0)), (v1, _sub(r0, v1), _sub(r1, v1)), (v2, _sub(q2, v2)))
 }
 
-#let _split-bezier(t, ..vertices, splits: 2) = {
+// Split any bezier at t
+#let _split-bezier-t(t: 0.5, ..vertices) = {
   assert(vertices.named().len() == 0)
   let vertices = vertices.pos()
-  let ts = range(splits).map(i => i / splits)
-  _split-single-bezier(t, ..vertices)
+  vertices.zip(vertices.slice(1)).enumerate().map(((i, (v0, v1))) => _split-single-bezier(t, v0, v1).slice(if i == 0 { 0 } else { 1 })).sum()
+}
+
+// Recursively split any bezier at 0.5
+#let _split-bezier-rep(rep, ..vertices) = {
+  assert(vertices.named().len() == 0)
+  let vertices = vertices.pos()
+  for _ in range(rep) {
+    vertices = _split-bezier-t(..vertices)
+  }
+  vertices
 }
 
 #let _offset-bezier(offset, ..vertices) = {
@@ -246,8 +257,15 @@
 #let _shadow-bezier(shadow-radius: 0.5cm, shadow-stops: (gray, white), vertex0, vertex1) = {
   //TODO: Convert bilinear curves (missing a control point) to bicubic
   place(path(vertex0, vertex1))
-  place(path(stroke: green, .._split-bezier(0.5, vertex0, vertex1)))
-  place(path(stroke: blue, .._offset-bezier(shadow-radius, .._split-bezier(0.5, vertex0, vertex1))))
+  // panic(_split-bezier-t(t: 0.5, vertex0, vertex1))
+  // place(path(stroke: green, .._split-bezier-t(.._split-bezier-t(t: 0.5, vertex0, vertex1))))
+  // place(path(stroke: green, .._split-bezier-t(t: 0.5, vertex0, vertex1)))
+  place(path(stroke: green, .._split-bezier-rep(6, vertex0, vertex1)))
+  place(path(stroke: blue, .._offset-bezier(shadow-radius, .._split-bezier-rep(5, vertex0, vertex1))))
+  let bezier = _split-bezier-rep(3, vertex0, vertex1)
+  for (v0, v1) in bezier.zip(bezier.slice(1)) {
+    place(path(stroke: red, closed: true, v0, v1, .._offset-bezier(shadow-radius, v0, v1).rev()))
+  }
   // place(path(stroke: blue, (
   //   _add(vertex0.first(), _rot((shadow-radius, 0cm), 90deg + calc.atan2(..vertex0.last().map(x => x.pt())))),
   //   ..vertex0.slice(1),
@@ -258,4 +276,4 @@
 }
 
 // #_shadow-bezier(((2cm, 2cm),), ((8cm, 8cm), (0cm, -6cm)))
-#_shadow-bezier(((2cm, 2cm), (-6cm, 0cm)), ((8cm, 8cm), (0cm, -6cm)))
+#_shadow-bezier(((2cm, 2cm), (-6cm, 0cm), (6cm, 0cm)), ((8cm, 8cm), (0cm, -6cm)))
