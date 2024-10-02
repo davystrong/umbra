@@ -1,15 +1,9 @@
 // Gets the length of an arbitrary vector
 #let _norm(p) = calc.sqrt(p.map(x => calc.pow(x.pt(), 2)).sum()) * 1pt
 // Adds any number of arbitrary vectors
-#let _add(..ps) = ps.pos().fold(
-  none,
-  (acc, x) => if acc == none { x } else { acc.zip(x).map(((y, z)) => y + z) },
-)
+#let _add(..ps) = ps.pos().fold(none, (acc, x) => if acc == none { x } else { acc.zip(x).map(((y, z)) => y + z) })
 // Takes the first vector and subtracts all subsequent vectors from it
-#let _sub(..ps) = ps.pos().fold(
-  none,
-  (acc, x) => if acc == none { x } else { acc.zip(x).map(((y, z)) => y - z) },
-)
+#let _sub(..ps) = ps.pos().fold(none, (acc, x) => if acc == none { x } else { acc.zip(x).map(((y, z)) => y - z) })
 // Rotates a 2D vector by the given angle
 #let _rot(p, angle) = (
   p.first() * calc.cos(angle) - p.last() * calc.sin(angle),
@@ -37,10 +31,9 @@
   )
   layout(
     size => {
-      let vertices = vertices.map(((x, y)) => (
-        if type(x) == ratio { x * size.width } else { x },
-        if type(y) == ratio { y * size.height } else { y },
-      ))
+      let vertices = vertices.map(
+        ((x, y)) => (if type(x) == ratio { x * size.width } else { x }, if type(y) == ratio { y * size.height } else { y },),
+      )
 
       let groups = vertices.zip(_roll(vertices, 1), _roll(vertices, 2), _roll(vertices, 3))
       if not closed {
@@ -69,17 +62,18 @@
         if da1 < 0deg or da1 > 180deg {
           da1 = 0
         }
-        place(top + left, dx: p2.first(), dy: p2.last(), rotate(
-          calc.atan2(.._sub(p1, p2).map(x => x.pt())) + 90deg + 180deg,
-          origin: top + left,
-          polygon(
+        place(
+          top + left,
+          dx: p2.first(),
+          dy: p2.last(),
+          rotate(calc.atan2(.._sub(p1, p2).map(x => x.pt())) + 90deg + 180deg, origin: top + left, polygon(
             fill: gradient.linear(..shadow-stops),
             (0pt, 0pt),
             _rot((width, 0pt), da1 / 2),
             _add((0pt, height), _rot((width, 0pt), -da0 / 2)),
             (0pt, height),
-          ),
-        ))
+          )),
+        )
       }
 
       // Setup corner shadows
@@ -107,18 +101,14 @@
               // A fixed size box is required to make radial gradient work. For PDF, the gradient doesn't actually have to be contained by the box, but this breaks with PNG, hence the extra complexity
               width: 2 * shadow-radius,
               height: 2 * shadow-radius,
-              place(
-                top + left,
-                dx: 50%,
-                dy: 50%,
-                path(
-                  closed: true,
-                  fill: gradient.radial(..shadow-stops, center: (50%, 50%), radius: 50%, relative: "parent"),
-                  (d0, _mult(_rot(d0, -90deg), calc.sin(da / 2)), (0pt, 0pt)),
-                  (0pt, 0pt),
-                  ((d1), (0pt, 0pt), _mult(_rot(d1, 90deg), calc.sin(da / 2)),),
-                ),
-              ),
+              //TODO: Switch to this logic: https://stackoverflow.com/questions/1734745/how-to-create-circle-with-b%C3%A9zier-curves
+              place(top + left, dx: 50%, dy: 50%, path(
+                closed: true,
+                fill: gradient.radial(..shadow-stops, center: (50%, 50%), radius: 50%, relative: "parent"),
+                (d0, _mult(_rot(d0, -90deg), calc.sin(da / 2)), (0pt, 0pt)),
+                (0pt, 0pt),
+                ((d1), (0pt, 0pt), _mult(_rot(d1, 90deg), calc.sin(da / 2)),),
+              )),
             ),
           )
         }
@@ -152,10 +142,7 @@
   layout(
     size => {
       // Replicate the built in optional positional body argument
-      assert(
-        body.named().len() == 0 and body.pos().len() <= 1,
-        message: "unexpected argument",
-      )
+      assert(body.named().len() == 0 and body.pos().len() <= 1, message: "unexpected argument")
       let body = if body.pos().len() == 1 { body.pos().first() } else { none }
 
       // Width and height seem to only be to allow for sizing relative to parent
@@ -181,15 +168,9 @@
           // Making it transparent doesn't actually do anything yet since gradients
           // can't handle transparency
           (shadow-stops.last().transparentize(100%), 0%),
-          (
-            shadow-stops.last().transparentize(100%),
-            radius / (radius + shadow-radius) * 100% - correction,
-          ),
+          (shadow-stops.last().transparentize(100%), radius / (radius + shadow-radius) * 100% - correction,),
           ..shadow-stops.enumerate().map(
-            ((i, stop)) => (
-              stop,
-              (radius + shadow-radius * i / (shadow-stops.len() - 1)) / (radius + shadow-radius) * 100%,
-            ),
+            ((i, stop)) => (stop, (radius + shadow-radius * i / (shadow-stops.len() - 1)) / (radius + shadow-radius) * 100%,),
           ),
         ),
         stroke: none,
@@ -199,17 +180,82 @@
 
       if fill != none or stroke != none or body != none {
         place(inner)
-        place(dx: shadow-radius, dy: shadow-radius, circle(
-          radius: radius,
-          fill: fill,
-          stroke: stroke,
-          inset: inset,
-          outset: outset,
-          body,
-        ))
+        place(
+          dx: shadow-radius,
+          dy: shadow-radius,
+          circle(radius: radius, fill: fill, stroke: stroke, inset: inset, outset: outset, body),
+        )
       } else {
         inner
       }
     },
   )
 }
+
+#let _correct_vertex(vertex) = {
+  if vertex.len() == 1 {
+    (..vertex, (0cm, 0cm))
+  } else if vertex.len() == 2 {
+    if type(vertex.first()) == array {
+      vertex
+    } else {
+      (vertex, (0cm, 0cm))
+    }
+  } else {
+    panic("invalid vertex")
+  }
+}
+
+#let _split-single-bezier(t, vertex0, vertex1) = {
+  // See https://en.wikipedia.org/wiki/B%C3%A9zier_curve#Higher-order_curves
+  // for a good diagram for this. Some of the naming is shared
+  // Basic vertex validation and correction
+  assert(t >= 0 and t <= 1)
+  let vertex0 = _correct_vertex(vertex0)
+  let vertex1 = _correct_vertex(vertex1)
+
+  // Calculate the new control points
+  let v0 = vertex0.first()
+  let v2 = vertex1.first()
+  let q0 = _add(v0, _mult(vertex0.last(), -t))
+  let q2 = _add(v2, _mult(vertex1.at(1), 1 - t))
+  let q1 = _add(_sub(v0, vertex0.last()), _mult(_sub(_add(v2, vertex1.at(1)), _add(_sub(v0, vertex0.last()))), t))
+  let r0 = _add(q0, _mult(_sub(q1, q0), t))
+  let r1 = _add(q1, _mult(_sub(q2, q1), t))
+  let v1 = _add(r0, _mult(_sub(r1, r0), t))
+
+  // Compile the three new vertices
+  ((v0, _sub(v0, q0)), (v1, _sub(r0, v1), _sub(r1, v1)), (v2, _sub(q2, v2)))
+}
+
+#let _split-bezier(t, ..vertices, splits: 2) = {
+  assert(vertices.named().len() == 0)
+  let vertices = vertices.pos()
+  let ts = range(splits).map(i => i / splits)
+  _split-single-bezier(t, ..vertices)
+}
+
+#let _offset-bezier(offset, ..vertices) = {
+  // Note: this assumes no sharp corners
+  assert(vertices.named().len() == 0)
+  vertices.pos().map(v => {
+    (_add(v.first(), _rot(_mult(v.at(1), 1 / _norm(v.at(1)).pt() * offset.pt()), 90deg)), ..v.slice(1))
+  })
+}
+
+#let _shadow-bezier(shadow-radius: 0.5cm, shadow-stops: (gray, white), vertex0, vertex1) = {
+  //TODO: Convert bilinear curves (missing a control point) to bicubic
+  place(path(vertex0, vertex1))
+  place(path(stroke: green, .._split-bezier(0.5, vertex0, vertex1)))
+  place(path(stroke: blue, .._offset-bezier(shadow-radius, .._split-bezier(0.5, vertex0, vertex1))))
+  // place(path(stroke: blue, (
+  //   _add(vertex0.first(), _rot((shadow-radius, 0cm), 90deg + calc.atan2(..vertex0.last().map(x => x.pt())))),
+  //   ..vertex0.slice(1),
+  // ), (
+  //   _add(vertex1.first(), _rot((shadow-radius, 0cm), 90deg + calc.atan2(..vertex1.at(1).map(x => x.pt())))),
+  //   ..vertex1.slice(1),
+  // )))
+}
+
+// #_shadow-bezier(((2cm, 2cm),), ((8cm, 8cm), (0cm, -6cm)))
+#_shadow-bezier(((2cm, 2cm), (-6cm, 0cm)), ((8cm, 8cm), (0cm, -6cm)))
