@@ -167,6 +167,7 @@
         fill: gradient.radial(
           // Making it transparent doesn't actually do anything yet since gradients
           // can't handle transparency
+          // Might be better to do this with a focal radius
           (shadow-stops.last().transparentize(100%), 0%),
           (shadow-stops.last().transparentize(100%), radius / (radius + shadow-radius) * 100% - correction,),
           ..shadow-stops.enumerate().map(
@@ -206,6 +207,14 @@
   }
 }
 
+#let _in-vec(vertex) = vertex.at(1)
+
+#let _out-vec(vertex) = if vertex.len() == 3 {
+  vertex.last()
+} else {
+  _rot(vertex.last(), 180deg)
+}
+
 // Split a bezier curve defined by two vertices at t
 #let _split-single-bezier(t, vertex0, vertex1) = {
   // See https://en.wikipedia.org/wiki/B%C3%A9zier_curve#Higher-order_curves
@@ -218,22 +227,34 @@
   // Calculate the new control points
   let v0 = vertex0.first()
   let v2 = vertex1.first()
-  let q0 = _add(v0, _mult(vertex0.at(1), -t))
-  let q2 = _add(v2, _mult(vertex1.at(1), 1 - t))
-  let q1 = _add(_sub(v0, vertex0.at(1)), _mult(_sub(_add(v2, vertex1.at(1)), _add(_sub(v0, vertex0.at(1)))), t))
+  let q0 = _add(v0, _mult(_out-vec(vertex0), t))
+  let q2 = _add(v2, _mult(_in-vec(vertex1), 1 - t))
+  let q1 = _add(v0, _out-vec(vertex0), _mult(_sub(_add(v2, _in-vec(vertex1)), _add(v0, _out-vec(vertex0))), t))
   let r0 = _add(q0, _mult(_sub(q1, q0), t))
   let r1 = _add(q1, _mult(_sub(q2, q1), t))
   let v1 = _add(r0, _mult(_sub(r1, r0), t))
 
   // Compile the three new vertices
-  ((v0, _sub(v0, q0)), (v1, _sub(r0, v1), _sub(r1, v1)), (v2, _sub(q2, v2)))
+  let a = (q2, v2)
+  let temp = _sub(q2, v2)
+  ((v0, vertex0.at(1), _sub(q0, v0)), (v1, _sub(r0, v1), _sub(r1, v1)), (v2, _sub(q2, v2), ..vertex1.slice(2)))
 }
 
 // Split any bezier at t
 #let _split-bezier-t(t: 0.5, ..vertices) = {
   assert(vertices.named().len() == 0)
   let vertices = vertices.pos()
-  vertices.zip(vertices.slice(1)).enumerate().map(((i, (v0, v1))) => _split-single-bezier(t, v0, v1).slice(if i == 0 { 0 } else { 1 })).sum()
+  vertices = vertices.zip(vertices.slice(1)).enumerate().map(((i, (v0, v1))) => _split-single-bezier(t, v0, v1)).sum()
+  // Merge duplicate endpoints (may be a simpler way)
+  vertices.zip(vertices.slice(1) + (none,)).enumerate().map(((i, (v0, v1))) => {
+    if calc.rem(i, 3) == 2 and v1 != none {
+      (..v0.slice(0, 2), v1.last())
+    } else if i != 0 and calc.rem(i, 3) == 0 and v1 != none {
+      none
+    } else {
+      v0
+    }
+  }).filter(it => it != none)
 }
 
 // Recursively split any bezier at 0.5
@@ -243,6 +264,7 @@
   for _ in range(rep) {
     vertices = _split-bezier-t(..vertices)
   }
+  // panic(vertices)
   vertices
 }
 
@@ -250,8 +272,19 @@
   // Note: this assumes no sharp corners
   assert(vertices.named().len() == 0)
   vertices.pos().map(v => {
-    (_add(v.first(), _rot(_mult(v.at(1), 1 / _norm(v.at(1)).pt() * offset.pt()), 90deg)), ..v.slice(1))
+    if _norm(_sub(..v.slice(1))).pt() == 0 {
+      panic(v)
+    }
+    (
+      _add(v.first(), _rot(_mult(_sub(..v.slice(1)), 1 / _norm(_sub(..v.slice(1))).pt() * offset.pt()), 90deg)),
+      ..v.slice(1),
+    )
   })
+}
+
+#let _standardise-vertices(..vertices) = {
+  assert(vertices.named().len() == 0)
+  vertices.pos().map(_correct_vertex).map(v => if v.len() == 3 { v } else { (v.first(), v.last(), _rot(v.last(), 180deg)) })
 }
 
 #let reverse-path(..vertices) = {
@@ -260,23 +293,56 @@
 }
 
 #let _shadow-bezier(shadow-radius: 0.5cm, shadow-stops: (gray, white), vertex0, vertex1) = {
+  // (vertex0, vertex1) = _standardise-vertices(vertex0, vertex1)
+  // Convert vectors to and from relative values, for use with gradients
+  let _frac(vec) = vec.map(x => x / 1cm * 100%)
+  let _unfrac(vec) = vec.map(x => x * 1cm)
   //TODO: Convert bilinear curves (missing a control point) to bicubic
   place(path(vertex0, vertex1))
   // panic(_split-bezier-t(t: 0.5, vertex0, vertex1))
   // place(path(stroke: green, .._split-bezier-t(.._split-bezier-t(t: 0.5, vertex0, vertex1))))
   // place(path(stroke: green, .._split-bezier-t(t: 0.5, vertex0, vertex1)))
+  place(path(stroke: yellow, .._split-bezier-rep(2, vertex0, vertex1)))
   place(path(stroke: green, .._split-bezier-rep(6, vertex0, vertex1)))
   place(path(stroke: blue, .._offset-bezier(shadow-radius, .._split-bezier-rep(5, vertex0, vertex1))))
+  // panic(vertex0, vertex1)
   let bezier = _split-bezier-rep(3, vertex0, vertex1)
+  // panic(bezier)
   for (v0, v1) in bezier.zip(bezier.slice(1)) {
     let vs = (v0, v1)
+    // Create the edge of the shadow
     let vs = reverse-path(.._offset-bezier(shadow-radius, ..vs))
     vs = (v0, v1, ..vs)
-    vs = vs.map(v => if v.len() == 3 {v} else {(..v, _rot(v.last(), 180deg))})
-    vs = vs.enumerate().map(((i, v)) => (v.first(), _rot(v.at(1), 90deg*calc.rem(i+1, 2)), _rot(v.at(2), -90deg*calc.rem(i, 2))))
-    place(path(stroke: red, closed: true, ..vs))
+    vs = vs.map(v => if v.len() == 3 { v } else { (..v, _rot(v.last(), 180deg)) })
+    //Make the corners of the shadow segments square
+    vs = vs.enumerate().map(((i, v)) => (
+      v.first(),
+      if calc.rem(i, 2) == 1 { v.at(1) } else { (0pt, 0pt) },
+      if calc.rem(i, 2) == 0 { v.at(2) } else { (0pt, 0pt) },
+    ))
+
+    let bbox = vs.fold((0pt, 0pt), (acc, v) => {
+      acc.zip(v.first()).map(((av, vv)) => calc.max(av, vv))
+    })
+
+    let theta = calc.atan2(..v1.at(1).map(x => x.pt())) - calc.atan2(..v0.last().map(x => x.pt()))
+    // panic(theta)
+    // place(dx: bbox.first(), dy: bbox.last(), text(str(theta.deg())))
+    // place(dx: bbox.first(), dy: bbox.last(), text(str(v0.len())))
+
+    bbox = _frac(bbox)
+    place(box(width: 1cm, height: 1cm, path(
+      stroke: red,
+      fill: gradient.radial(green, blue, red, yellow, center: bbox, radius: 50%, relative: "parent"),
+      closed: true,
+      ..vs,
+    )))
+    // place(path((0pt, 0pt), _unfrac(bbox)))
   }
 }
 
 // #_shadow-bezier(((2cm, 2cm),), ((8cm, 8cm), (0cm, -6cm)))
-#_shadow-bezier(((2cm, 2cm), (-6cm, 0cm), (6cm, 0cm)), ((8cm, 8cm), (0cm, -6cm)))
+#_shadow-bezier(((1cm, 1cm), (-6cm, 0cm), (6cm, 0cm)), ((8cm, 8cm), (0cm, -6cm)))
+
+// #circle(radius: 5cm, fill: gradient.radial(focal-radius: 40%, blue, yellow))
+// #ellipse(height: 2cm, width: 10cm, fill: gradient.radial(focal-radius: 40%, blue, yellow))
