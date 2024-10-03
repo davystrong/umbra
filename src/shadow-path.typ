@@ -254,6 +254,11 @@
   })
 }
 
+#let reverse-path(..vertices) = {
+  assert(vertices.named().len() == 0)
+  vertices.pos().rev().map(v => if v.len() == 3 { (v.first(), ..v.slice(1).rev()) } else { (v.first(), _rot(v.last(), 180deg)) })
+}
+
 #let _shadow-bezier(shadow-radius: 0.5cm, shadow-stops: (gray, white), vertex0, vertex1) = {
   //TODO: Convert bilinear curves (missing a control point) to bicubic
   place(path(vertex0, vertex1))
@@ -264,42 +269,13 @@
   place(path(stroke: blue, .._offset-bezier(shadow-radius, .._split-bezier-rep(5, vertex0, vertex1))))
   let bezier = _split-bezier-rep(3, vertex0, vertex1)
   for (v0, v1) in bezier.zip(bezier.slice(1)) {
-    let (v3, v2) = _offset-bezier(shadow-radius, v0, v1)
-    if v0.len() == 2 {
-      v0.insert(1, _rot(v0.last(), 90deg))
-      v0.at(2) = _rot(v0.at(2), 180deg)
-    } else {
-      v0.at(1) = _rot(v0.last(), -90deg)
-    }
-    if v1.len() == 2 {
-      v1.insert(1, _rot(v1.last(), 0deg))
-      v1.at(2) = _rot(v1.at(2), 90deg)
-    } else {
-      v1.at(1) = _rot(v1.last(), 180deg)
-      v1.at(2) = _rot(v1.at(2), -90deg)
-    }
-    if v2.len() == 2 {
-      v2.insert(1, _rot(v2.last(), -90deg))
-    } else {
-      v2.at(1) = _rot(v2.last(), 90deg)
-      v2.at(2) = _rot(v2.at(2), 180deg)
-    }
-    if v3.len() == 2 {
-      v3.insert(2, _rot(v3.last(), -90deg))
-    } else {
-      v3.at(2) = _rot(v3.last(), 90deg)
-    }
-    v3.at(1) = _rot(v3.at(1), 180deg)
-    // panic(v0, v1, v2, v3)
-    place(path(stroke: red, closed: true, v0, v1, v2, v3))
+    let vs = (v0, v1)
+    let vs = reverse-path(.._offset-bezier(shadow-radius, ..vs))
+    vs = (v0, v1, ..vs)
+    vs = vs.map(v => if v.len() == 3 {v} else {(..v, _rot(v.last(), 180deg))})
+    vs = vs.enumerate().map(((i, v)) => (v.first(), _rot(v.at(1), 90deg*calc.rem(i+1, 2)), _rot(v.at(2), -90deg*calc.rem(i, 2))))
+    place(path(stroke: red, closed: true, ..vs))
   }
-  // place(path(stroke: blue, (
-  //   _add(vertex0.first(), _rot((shadow-radius, 0cm), 90deg + calc.atan2(..vertex0.last().map(x => x.pt())))),
-  //   ..vertex0.slice(1),
-  // ), (
-  //   _add(vertex1.first(), _rot((shadow-radius, 0cm), 90deg + calc.atan2(..vertex1.at(1).map(x => x.pt())))),
-  //   ..vertex1.slice(1),
-  // )))
 }
 
 // #_shadow-bezier(((2cm, 2cm),), ((8cm, 8cm), (0cm, -6cm)))
