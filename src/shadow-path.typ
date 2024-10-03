@@ -237,7 +237,7 @@
   // Compile the three new vertices
   let a = (q2, v2)
   let temp = _sub(q2, v2)
-  ((v0, vertex0.at(1), _sub(q0, v0)), (v1, _sub(r0, v1), _sub(r1, v1)), (v2, _sub(q2, v2), ..vertex1.slice(2)))
+  ((v0, _in-vec(vertex0), _sub(q0, v0)), (v1, _sub(r0, v1), _sub(r1, v1)), (v2, _sub(q2, v2), ..vertex1.slice(2)))
 }
 
 // Split any bezier at t
@@ -245,7 +245,7 @@
   assert(vertices.named().len() == 0)
   let vertices = vertices.pos()
   vertices = vertices.zip(vertices.slice(1)).enumerate().map(((i, (v0, v1))) => _split-single-bezier(t, v0, v1)).sum()
-  // Merge duplicate endpoints (may be a simpler way)
+  // Merge duplicate endpoints (may be a simpler way that I'm not thinking of)
   vertices.zip(vertices.slice(1) + (none,)).enumerate().map(((i, (v0, v1))) => {
     if calc.rem(i, 3) == 2 and v1 != none {
       (..v0.slice(0, 2), v1.last())
@@ -264,7 +264,6 @@
   for _ in range(rep) {
     vertices = _split-bezier-t(..vertices)
   }
-  // panic(vertices)
   vertices
 }
 
@@ -295,16 +294,16 @@
 #let _shadow-bezier(shadow-radius: 0.5cm, shadow-stops: (gray, white), vertex0, vertex1) = {
   // (vertex0, vertex1) = _standardise-vertices(vertex0, vertex1)
   // Convert vectors to and from relative values, for use with gradients
-  let _frac(vec) = vec.map(x => x / 1cm * 100%)
-  let _unfrac(vec) = vec.map(x => x * 1cm)
+  let _frac(..vec) = vec.pos().map(x => x / 1cm * 100%)
+  let _unfrac(..vec) = vec.pos().map(x => x * 1cm)
   //TODO: Convert bilinear curves (missing a control point) to bicubic
-  place(path(vertex0, vertex1))
+  // place(path(vertex0, vertex1))
   // panic(_split-bezier-t(t: 0.5, vertex0, vertex1))
   // place(path(stroke: green, .._split-bezier-t(.._split-bezier-t(t: 0.5, vertex0, vertex1))))
   // place(path(stroke: green, .._split-bezier-t(t: 0.5, vertex0, vertex1)))
-  place(path(stroke: yellow, .._split-bezier-rep(2, vertex0, vertex1)))
-  place(path(stroke: green, .._split-bezier-rep(6, vertex0, vertex1)))
-  place(path(stroke: blue, .._offset-bezier(shadow-radius, .._split-bezier-rep(5, vertex0, vertex1))))
+  // place(path(stroke: yellow, .._split-bezier-rep(2, vertex0, vertex1)))
+  // place(path(stroke: green, .._split-bezier-rep(6, vertex0, vertex1)))
+  // place(path(stroke: blue, .._offset-bezier(shadow-radius, .._split-bezier-rep(5, vertex0, vertex1))))
   // panic(vertex0, vertex1)
   let bezier = _split-bezier-rep(3, vertex0, vertex1)
   // panic(bezier)
@@ -325,18 +324,31 @@
       acc.zip(v.first()).map(((av, vv)) => calc.max(av, vv))
     })
 
-    let theta = calc.atan2(..v1.at(1).map(x => x.pt())) - calc.atan2(..v0.last().map(x => x.pt()))
-    // panic(theta)
+    let theta = calc.atan2(..v1.at(1).map(x => x.pt())) - calc.atan2(..v0.last().map(x => x.pt())) + 180deg
+    let factor = 4 / 3 * calc.tan(theta / 4)
+    let r0 = _norm(_out-vec(v0)) / factor
+    let r1 = _norm(_out-vec(v1)) / factor
+
+    let v = _rot(_out-vec(v0), 90deg)
+    // place(line(start: v0.first(), angle: calc.atan2(v.first().pt(), v.last().pt()), length: r0))
+    let s0 = _add(v0.first(), _rot((r0, 0cm), calc.atan2(v.first().pt(), v.last().pt())))
+    // place(path(v0.first(), s0))
+
+    // r0 = _frac(r0).first()
+    // r1 = _frac(r1).first()
+
     // place(dx: bbox.first(), dy: bbox.last(), text(str(theta.deg())))
     // place(dx: bbox.first(), dy: bbox.last(), text(str(v0.len())))
+    // place(dx: bbox.first(), dy: bbox.last(), text(str(r1.cm())))
 
-    bbox = _frac(bbox)
-    place(box(width: 1cm, height: 1cm, path(
-      stroke: red,
-      fill: gradient.radial(green, blue, red, yellow, center: bbox, radius: 50%, relative: "parent"),
-      closed: true,
-      ..vs,
-    )))
+    bbox = _frac(..bbox)
+    place(box(width: 1cm, height: 1cm, path(stroke: none, fill: gradient.radial(
+      ..shadow-stops,
+      center: _frac(..s0),
+      radius: _frac(r0 + shadow-radius).first(),
+      focal-radius: _frac(r0).first(),
+      relative: "parent",
+    ), closed: true, ..vs)))
     // place(path((0pt, 0pt), _unfrac(bbox)))
   }
 }
