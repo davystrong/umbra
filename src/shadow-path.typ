@@ -291,7 +291,7 @@
   vertices.pos().rev().map(v => if v.len() == 3 { (v.first(), ..v.slice(1).rev()) } else { (v.first(), _rot(v.last(), 180deg)) })
 }
 
-#let _shadow-bezier(shadow-radius: 0.5cm, shadow-stops: (gray, white), vertex0, vertex1) = {
+#let _shadow-bezier(shadow-radius: 0.5cm, shadow-stops: (gray, white), splits: 5, vertex0, vertex1) = {
   // (vertex0, vertex1) = _standardise-vertices(vertex0, vertex1)
   // Convert vectors to and from relative values, for use with gradients
   let _frac(..vec) = vec.pos().map(x => x / 1cm * 100%)
@@ -305,7 +305,7 @@
   // place(path(stroke: green, .._split-bezier-rep(6, vertex0, vertex1)))
   // place(path(stroke: blue, .._offset-bezier(shadow-radius, .._split-bezier-rep(5, vertex0, vertex1))))
   // panic(vertex0, vertex1)
-  let bezier = _split-bezier-rep(3, vertex0, vertex1)
+  let bezier = _split-bezier-rep(splits, vertex0, vertex1)
   // panic(bezier)
   for (v0, v1) in bezier.zip(bezier.slice(1)) {
     let vs = (v0, v1)
@@ -329,24 +329,33 @@
     let r0 = _norm(_out-vec(v0)) / factor
     let r1 = _norm(_out-vec(v1)) / factor
 
-    let v = _rot(_out-vec(v0), 90deg)
-    // place(line(start: v0.first(), angle: calc.atan2(v.first().pt(), v.last().pt()), length: r0))
-    let s0 = _add(v0.first(), _rot((r0, 0cm), calc.atan2(v.first().pt(), v.last().pt())))
+    // let v = _rot(_out-vec(v1), 90deg)
+    // place(line(start: v1.first(), angle: calc.atan2(v.first().pt(), v.last().pt()), length: r1))
+    let s0 = _add(v0.first(), _rot((r0, 0cm), calc.atan2(.._rot(_out-vec(v0), 90deg).map(x => x.pt()))))
+    let s1 = _add(v1.first(), _rot((r1, 0cm), calc.atan2(.._rot(_in-vec(v1), -90deg).map(x => x.pt()))))
+
+    // place(path(v1.first(), s1))
     // place(path(v0.first(), s0))
 
     // r0 = _frac(r0).first()
     // r1 = _frac(r1).first()
 
+    // if theta.deg() < 0 {
+    //   panic(r0, r1)
+    // }
+
     // place(dx: bbox.first(), dy: bbox.last(), text(str(theta.deg())))
     // place(dx: bbox.first(), dy: bbox.last(), text(str(v0.len())))
     // place(dx: bbox.first(), dy: bbox.last(), text(str(r1.cm())))
 
-    bbox = _frac(..bbox)
+    // bbox = _frac(..bbox)
+    let r = (r0 + r1) / 2
     place(box(width: 1cm, height: 1cm, path(stroke: none, fill: gradient.radial(
-      ..shadow-stops,
-      center: _frac(..s0),
-      radius: _frac(r0 + shadow-radius).first(),
-      focal-radius: _frac(r0).first(),
+      ..if r.pt() > 0 {shadow-stops} else {shadow-stops.rev()},
+      center: _frac(.._add(s0, _mult(_sub(s1, s0), 0.5))),
+      // center: _frac(..s1),
+      radius: _frac(calc.abs(r) + if r.pt() > 0 {shadow-radius} else {0cm}).first(),
+      focal-radius: _frac(calc.abs(r) - if r.pt() < 0 {shadow-radius} else {0cm}).first(),
       relative: "parent",
     ), closed: true, ..vs)))
     // place(path((0pt, 0pt), _unfrac(bbox)))
@@ -354,7 +363,8 @@
 }
 
 // #_shadow-bezier(((2cm, 2cm),), ((8cm, 8cm), (0cm, -6cm)))
-#_shadow-bezier(((1cm, 1cm), (-6cm, 0cm), (6cm, 0cm)), ((8cm, 8cm), (0cm, -6cm)))
+#_shadow-bezier(((1cm, 1cm), (-6cm, 0cm), (20cm, 1cm)), ((8cm, 8cm), (0cm, -6cm)))
+// #_shadow-bezier(((1cm, 1cm), (-6cm, 0cm), (6cm, 0cm)), ((8cm, 8cm), (0cm, -6cm)))
 
 // #circle(radius: 5cm, fill: gradient.radial(focal-radius: 40%, blue, yellow))
 // #ellipse(height: 2cm, width: 10cm, fill: gradient.radial(focal-radius: 40%, blue, yellow))
