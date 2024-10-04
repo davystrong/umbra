@@ -122,6 +122,7 @@
 
     // Calculate angle change from start to finish
     let theta = calc.atan2(..v1.at(1).map(x => x.pt())) - calc.atan2(..v0.last().map(x => x.pt())) + 180deg
+    let theta = calc.rem(theta.deg(), 360) * 1deg
 
     // Calculate radii using logic from here: https://stackoverflow.com/questions/1734745/how-to-create-circle-with-b%C3%A9zier-curves
     let factor = 4 / 3 * calc.tan(theta / 4)
