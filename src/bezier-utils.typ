@@ -126,7 +126,7 @@
     // Calculate radii using logic from here: https://stackoverflow.com/questions/1734745/how-to-create-circle-with-b%C3%A9zier-curves
     let factor = 4 / 3 * calc.tan(theta / 4)
     let r0 = _norm(_out-vec(v0)) / factor
-    let r1 = _norm(_out-vec(v1)) / factor
+    let r1 = _norm(_in-vec(v1)) / factor
 
     // Calculate the centre of the shadow from both edges, then get the midpoint.
     let s0 = _add(v0.first(), _rot((r0, 0cm), calc.atan2(.._rot(_out-vec(v0), 90deg).map(x => x.pt()))))
