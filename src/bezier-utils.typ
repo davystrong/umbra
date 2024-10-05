@@ -77,20 +77,47 @@
 #let _offset-bezier(offset, ..vertices) = {
   // Note: this assumes no sharp corners
   assert(vertices.named().len() == 0)
-  vertices.pos().map(v => {
-    if _norm(_sub(..v.slice(1))).pt() == 0 {
-      panic(v)
+  vertices.pos().map(
+    v => {
+      if _norm(_sub(..v.slice(1))).pt() == 0 {
+        panic(v)
+      }
+      (
+        _add(
+          v.first(),
+          _rot(_mult(_sub(_in-vec(v), _out-vec(v)), 1 / _norm(_sub(_in-vec(v), _out-vec(v))).pt() * offset.pt()), 90deg),
+        ),
+        ..v.slice(1),
+      )
+    },
+  )
+}
+
+#let _make-cubic(..vertices) = {
+  assert(vertices.named().len() == 0)
+  let vertices = vertices.pos().map(v => if v.len() == 2 and type(v.first()) != array { (v,) } else { v })
+  _roll(vertices, -1).zip(vertices, _roll(vertices, 1)).map(((v0, v1, v2)) => {
+    let _calculate-control-points(v0, v1) = {
+      let c0 = _out-vec(v0)
+      let c1 = _in-vec(v1)
+      if c0 == (0cm, 0cm) and c1 == (0cm, 0cm) {
+        panic("TODO")
+      } else if c0 == (0cm, 0cm) or c1 == (0cm, 0cm) {
+        let c = if c1 == (0cm, 0cm) { _add(v0.first(), c0) } else { _add(v1.first(), c1) }
+        c0 = _sub(_mult(_add(v0.first(), _mult(c, 2)), 1 / 3), v0.first())
+        c1 = _sub(_mult(_add(v1.first(), _mult(c, 2)), 1 / 3), v1.first())
+      }
+      (c0, c1)
     }
-    (
-      _add(v.first(), _rot(_mult(_sub(..v.slice(1)), 1 / _norm(_sub(..v.slice(1))).pt() * offset.pt()), 90deg)),
-      ..v.slice(1),
-    )
+    let (c0, c1) = _calculate-control-points(v0, v1)
+    let (c2, c3) = _calculate-control-points(v1, v2)
+    (v1.first(), c1, c2)
   })
 }
 
 #let _standardise-vertices(..vertices) = {
   assert(vertices.named().len() == 0)
-  vertices.pos().map(_correct_vertex).map(v => if v.len() == 3 { v } else { (v.first(), v.last(), _rot(v.last(), 180deg)) })
+  vertices.pos().map(_correct_vertex).map(v => (v.first(), _in-vec(v), _out-vec(v)))
 }
 
 #let reverse-path(..vertices) = {
@@ -98,7 +125,7 @@
   vertices.pos().rev().map(v => if v.len() == 3 { (v.first(), ..v.slice(1).rev()) } else { (v.first(), _rot(v.last(), 180deg)) })
 }
 
-#let _shadow-bezier(shadow-radius: 0.5cm, shadow-stops: (gray, white), splits: 4, radius-multiplier: 2, ..vertices) = {
+#let _shadow-bezier(shadow-radius: 0.5cm, shadow-stops: (gray, white), splits: 4, radius-multiplier: 1, ..vertices) = {
   // Convert vectors to and from relative values, for use with gradients
   let _frac(..vec) = vec.pos().map(x => x / 1cm * 100%)
   let _unfrac(..vec) = vec.pos().map(x => x * 1cm)
@@ -107,6 +134,9 @@
   // This should be improved by splitting at sharpest edges or least "circular" points
   let bezier = _split-bezier-rep(splits, ..vertices)
   for (v0, v1) in bezier.zip(bezier.slice(1)) {
+    (v0, v1) = _make-cubic(v0, v1)
+    v0.at(1) = (0cm, 0cm)
+    v1.at(2) = (0cm, 0cm)
     let vs = (v0, v1)
     // Create the outer edge of the shadow. Multiplying it by some factor reduces artefacts from cropped edges
     let vs = reverse-path(.._offset-bezier(radius-multiplier * shadow-radius, ..vs))
@@ -137,6 +167,14 @@
     // Calculate the average radius. Note this is signed because that indicates convexity
     let r = (r0 + r1) / 2
 
+    if r0 == 0cm {
+      r = r1
+      s = s1
+    } else if r1 == 0cm {
+      r = r0
+      s = s0
+    }
+
     // Draw the segment of shadow. Putting it in a square box ensures
     // the gradient will be circular. Otherwise it will depend on the
     // global location of the segment. Note that effect could be
@@ -150,9 +188,51 @@
       relative: "parent",
     ), closed: true, ..vs)))
   }
+  for (v0, v1, v2) in vertices.pos().zip(vertices.pos().slice(1), vertices.pos().slice(2)) {
+    if _in-vec(v0) != _rot(_out-vec(v0), 180deg) {
+      (v0, v1) = _make-cubic(v0, v1)
+      (v1, v2) = _make-cubic(v1, v2)
+
+      let in_angle = calc.atan2(.._in-vec(v1).map(x => x.pt()))
+      let out_angle = calc.atan2(.._out-vec(v1).map(x => x.pt()))
+      let theta = out_angle - in_angle + 180deg
+      let cp_size = 4 / 3 * calc.tan(theta / 4) * shadow-radius * radius-multiplier
+
+      place(
+        box(
+          width: 1cm,
+          height: 1cm,
+          path(
+            closed: true,
+            (v1.first()),
+            (
+              _add(v1.first(), _rot((shadow-radius * radius-multiplier, 0cm), in_angle + 90deg)),
+              (0cm, 0cm),
+              _rot((cp_size, 0cm), in_angle + 180deg),
+            ),
+            (
+              _add(v1.first(), _rot((shadow-radius * radius-multiplier, 0cm), out_angle - 90deg)),
+              _rot((cp_size, 0cm), out_angle + 180deg),
+              (0cm, 0cm),
+            ),
+            fill: gradient.radial(..shadow-stops, relative: "parent", radius: _frac(shadow-radius).first(), center: _frac(..v1.first())),
+          ),
+        ),
+      )
+    }
+  }
 }
 
-#_shadow-bezier(((1cm, 1cm), (-6cm, 0cm), (20cm, 1cm)), ((8cm, 8cm), (0cm, -6cm)))
-#path(stroke: none, ((1cm, 1cm), (-6cm, 0cm), (20cm, 1cm)), ((8cm, 8cm), (0cm, -6cm)))
+#_shadow-bezier(((1cm, 1cm), (-6cm, 0cm), (20cm, 1cm)), ((5cm, 5cm), (0cm, 0cm), (-5cm, -5cm)), ((8cm, 8cm), (0cm, -6cm)))
+// #_shadow-bezier(((1cm, 1cm), (-6cm, 0cm), (20cm, 1cm)), ((5cm, 5cm), (0cm, 0cm), (-5cm, 0cm)), ((8cm, 8cm), (0cm, -6cm)))
+// #path(
+//   stroke: black,
+//   ((1cm, 1cm), (-6cm, 0cm), (20cm, 1cm)),
+//   ((5cm, 5cm), (0cm, 0cm), (-5cm, 0cm)),
+//   ((8cm, 8cm), (0cm, -6cm)),
+// )
 
-#square(height: 1cm, width: 10cm)
+// #_shadow-bezier(((1cm, 1cm), (-6cm, 0cm), (6cm, 0cm)), ((8cm, 8cm), (0cm, -6cm)))
+// #_shadow-bezier(((1cm, 1cm), (-6cm, 0cm), (20cm, 1cm)), ((8cm, 8cm), (0cm, -6cm)))
+
+// #square(height: 1cm, width: 10cm)
