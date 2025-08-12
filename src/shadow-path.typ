@@ -111,12 +111,16 @@
                 top + left,
                 dx: 50%,
                 dy: 50%,
-                path(
-                  closed: true,
+                curve(
                   fill: gradient.radial(..shadow-stops, center: (50%, 50%), radius: 50%, relative: "parent"),
-                  (d0, _mult(_rot(d0, -90deg), calc.sin(da / 2)), (0pt, 0pt)),
-                  (0pt, 0pt),
-                  ((d1), (0pt, 0pt), _mult(_rot(d1, 90deg), calc.sin(da / 2)),),
+                  curve.move((0pt, 0pt)),
+                  curve.line(d1),
+                  curve.cubic(
+                    _add(d1, _mult(_rot(d1, 90deg), calc.sin(da / 2))),
+                    _add(d0, _mult(_rot(d0, -90deg), calc.sin(da / 2))),
+                    d0,
+                  ),
+                  curve.close(mode: "straight"),
                 ),
               ),
             ),
@@ -125,7 +129,13 @@
       }
 
       if fill != none or stroke != none {
-        path(fill: fill, stroke: stroke, closed: closed, ..vertices)
+        curve(fill: fill, stroke: stroke,
+          curve.move(vertices.first()),
+          ..vertices.slice(1).map(curve.line),
+          ..if closed {
+            (curve.close(),)
+          },
+        )
       }
     },
   )
