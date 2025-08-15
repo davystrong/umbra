@@ -1,4 +1,4 @@
-#import "@preview/umbra:0.1.0": shadow-path
+#import "@preview/umbra:0.1.1": shadow-path
 
 #let background-colour = color.rgb("#EFEEEE")
 #let radius = 0.4cm

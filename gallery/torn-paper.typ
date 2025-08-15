@@ -1,5 +1,5 @@
 #import "@preview/suiji:0.3.0": *
-#import "@preview/umbra:0.1.0": shadow-path
+#import "@preview/umbra:0.1.1": shadow-path
 
 #set page(width: 13cm, height: 8cm, margin: 0.0cm)
 

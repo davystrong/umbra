@@ -25,7 +25,7 @@ Umbra is a library for drawing basic gradient shadows in [typst](https://typst.a
 
 The following code creates a very basic square shadow:
 ```
-#import "@preview/umbra:0.1.0": shadow-path
+#import "@preview/umbra:0.1.1": shadow-path
 
 #shadow-path((10%, 10%), (10%, 90%), (90%, 90%), (90%, 10%), closed: true)
 ```
